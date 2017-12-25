@@ -8,7 +8,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.ArrayList;
 
-public class LocalServerWindow extends JFrame implements TCPConnectionListener {
+public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionListener {
     
     private static final int PORT = 5678;
     private static final int WIDTH = 375;
@@ -22,7 +22,7 @@ public class LocalServerWindow extends JFrame implements TCPConnectionListener {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
-                new LocalServerWindow();
+                new PublicChatRoomServerWindow();
             }
         });
     }
@@ -48,7 +48,7 @@ public class LocalServerWindow extends JFrame implements TCPConnectionListener {
                     try (ServerSocket serverSocket = new ServerSocket(PORT)) {
                         while (true) {
                             try {
-                                new TCPConnection(LocalServerWindow.this, serverSocket.accept());
+                                new TCPConnection(PublicChatRoomServerWindow.this, serverSocket.accept());
                             } catch (IOException e) {
                                 log("TCPConnection exception: " + e);
                                 e.printStackTrace();
@@ -75,7 +75,7 @@ public class LocalServerWindow extends JFrame implements TCPConnectionListener {
         }
     }
     
-    private LocalServerWindow() {
+    private PublicChatRoomServerWindow() {
         
         serverThread = null;
         
