@@ -42,6 +42,8 @@ public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionL
     
     private void runServer() {
         if (serverThread == null) {
+            //TODO Реализовать проверку порта
+            //TODO Убрать константу PORT
             log("Running server ...");
             serverThread = new Thread(new Runnable() {
                 public void run() {
@@ -62,6 +64,7 @@ public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionL
                     }
                 }
             });
+            serverThread.start();
             log("Server has been started");
         }
     }
