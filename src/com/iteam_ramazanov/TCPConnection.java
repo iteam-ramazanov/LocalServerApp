@@ -39,9 +39,9 @@ public class TCPConnection {
         rxThread.start();
     }
 
-    public synchronized void sendString(String value) {
+    public synchronized void sendString(String message) {
         try {
-            out.write(value + "\r\n");
+            out.write(message + "\r\n");
             out.flush();
         } catch (IOException e) {
             eventListener.onException(this, e);
@@ -61,5 +61,13 @@ public class TCPConnection {
     @Override
     public String toString() {
         return "TCPConnection: " + socket.getInetAddress() + ": " + socket.getPort();
+    }
+    
+    public String getIPAddressAsString() {
+        return socket.getInetAddress().toString();
+    }
+    
+    public String getPortAsString() {
+        return Integer.toString(socket.getPort());
     }
 }

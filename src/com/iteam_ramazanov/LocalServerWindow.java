@@ -4,13 +4,19 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.util.ArrayList;
 
-public class LocalServerWindow extends JFrame {
+public class LocalServerWindow extends JFrame implements TCPConnectionListener {
     
     private static final int PORT = 5678;
     private static final int WIDTH = 375;
     private static final int HEIGHT = 500;
     private static final String NEW_LINE = "\r\n";
+    
+    private Thread serverThread;
+    private final ArrayList<TCPConnection> connections = new ArrayList<>();
     
     public static void main(String[] args) {
         SwingUtilities.invokeLater(new Runnable() {
@@ -35,16 +41,43 @@ public class LocalServerWindow extends JFrame {
     }
     
     private void runServer() {
-        log("Running server ...");
-        log("Server has been started");
+        if (serverThread == null) {
+            log("Running server ...");
+            serverThread = new Thread(new Runnable() {
+                public void run() {
+                    try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+                        while (true) {
+                            try {
+                                new TCPConnection(LocalServerWindow.this, serverSocket.accept());
+                            } catch (IOException e) {
+                                log("TCPConnection exception: " + e);
+                                e.printStackTrace();
+                            }
+                        }
+                    } catch (IOException e) {
+                        log("IOException when getting server socket: " + e);
+                        log("The application will be closed");
+                        e.printStackTrace();
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
+            log("Server has been started");
+        }
     }
     
     private void stopServer() {
-        log("Stopping server ...");
-        log("Server has been stopped");
+        if (serverThread != null) {
+            log("Stopping server ...");
+            serverThread.interrupt();
+            serverThread = null;
+            log("Server has been stopped");
+        }
     }
     
     private LocalServerWindow() {
+        
+        serverThread = null;
         
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setSize(WIDTH, HEIGHT);
@@ -124,4 +157,32 @@ public class LocalServerWindow extends JFrame {
         requestFocusInWindow();
     }
     
+    @Override
+    public void onConnectionReady(TCPConnection tcpConnection) {
+        connections.add(tcpConnection);
+        sendToAllClients("New client with IP address " + tcpConnection.getIPAddressAsString() + " connected to the port" + tcpConnection.getPortAsString());
+    }
+    
+    @Override
+    public void onReceiveString(TCPConnection tcpConnection, String message) {
+        sendToAllClients(message);
+    }
+    
+    @Override
+    public void onDisconnect(TCPConnection tcpConnection) {
+        connections.remove(tcpConnection);
+        sendToAllClients("Client with IP address " + tcpConnection.getIPAddressAsString() + " disconnected");
+    }
+    
+    @Override
+    public void onException(TCPConnection tcpConnection, Exception e) {
+        log("TCPConnection exception: " + e);
+    }
+    
+    private void sendToAllClients(String message) {
+        log(message);
+        for (TCPConnection connection: connections) {
+            connection.sendString(message);
+        }
+    }
 }
