@@ -5,17 +5,19 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.net.ServerSocket;
 import java.util.ArrayList;
 
 public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionListener {
     
-    private static final int PORT = 5678;
     private static final int WIDTH = 375;
     private static final int HEIGHT = 500;
     private static final String NEW_LINE = "\r\n";
+    private static final int ALLOWED_MIN_PORT_NUMBER = 49152;
+    private static final int ALLOWED_MAX_PORT_NUMBER = 65535;
     
-    private Thread serverThread;
+    private ServerThread serverThread;
     private final ArrayList<TCPConnection> connections = new ArrayList<>();
     
     public static void main(String[] args) {
@@ -30,7 +32,7 @@ public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionL
     private  final  JLabel       labelYourIPAddress     =  new  JLabel();
     private  final  JLabel       labelTheIPAddress      =  new  JLabel();
     private  final  JLabel       labelServerPortNumber  =  new  JLabel();
-    private  final  JTextField   fieldInputPort         =  new  JTextField("5678", 7);
+    private  final  JTextField   fieldInputPort         =  new  JTextField("56789", 7);
     private  final  JTextArea    areaLogs               =  new  JTextArea("");
     private  final  JScrollPane  areaLogsScrollPane     =  new  JScrollPane(areaLogs);
     private  final  JButton      buttonRunServer        =  new  JButton("Запуск сервера");
@@ -40,32 +42,61 @@ public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionL
         areaLogs.append(line + NEW_LINE);
     }
     
-    private void runServer() {
-        if (serverThread == null) {
-            //TODO Реализовать проверку порта
-            //TODO Убрать константу PORT
-            log("Running server ...");
-            serverThread = new Thread(new Runnable() {
-                public void run() {
-                    try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-                        while (true) {
-                            try {
-                                new TCPConnection(PublicChatRoomServerWindow.this, serverSocket.accept());
-                            } catch (IOException e) {
-                                log("TCPConnection exception: " + e);
-                                e.printStackTrace();
-                            }
-                        }
+    private int portNumber(String str) {
+        if ((str == null) || (str.isEmpty())) return 0;
+        if (str.charAt(0) == '0') return 0;
+        int result = 0;
+        for (char c: str.toCharArray()) {
+            if (!Character.isDigit(c)) return 0;
+            result = result * 10 + Character.getNumericValue(c);
+            if (result > ALLOWED_MAX_PORT_NUMBER) return 0;
+        }
+        if (result < ALLOWED_MIN_PORT_NUMBER) return 0;
+        return result;
+    }
+    
+    private class ServerThread extends Thread {
+        private int port;
+        
+        public ServerThread(int port) {
+            super();
+            this.port = port;
+        }
+        
+        @Override
+        public void run() {
+            try (ServerSocket serverSocket = new ServerSocket(port)){
+                log("Server has been started");
+                while (!isInterrupted()) {
+                    try {
+                        new TCPConnection(PublicChatRoomServerWindow.this, serverSocket.accept());
                     } catch (IOException e) {
-                        log("IOException when getting server socket: " + e);
-                        log("The application will be closed");
+                        log("TCPConnection exception: " + e);
                         e.printStackTrace();
-                        throw new RuntimeException(e);
                     }
                 }
-            });
-            serverThread.start();
-            log("Server has been started");
+            } catch (IOException e) {
+                log("IOException when getting server socket: " + e);
+                e.printStackTrace();
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    
+    private void runServer() {
+        if (serverThread == null) {
+            int port = portNumber(fieldInputPort.getText());
+            if (port != 0) {
+                log("Running server ...");
+                // TODO Устранить появления исключения IOException when getting server socket: java.net.BindException: Address already in use (Bind failed)
+                serverThread = new ServerThread(port);
+                serverThread.start();
+            } else {
+                JOptionPane.showMessageDialog(this,
+                                              "Выберите порт в диапазоне " + ALLOWED_MIN_PORT_NUMBER + "-" + ALLOWED_MAX_PORT_NUMBER,
+                                              "Недопустимый номер порта",
+                                              JOptionPane.PLAIN_MESSAGE);
+            }
         }
     }
     
