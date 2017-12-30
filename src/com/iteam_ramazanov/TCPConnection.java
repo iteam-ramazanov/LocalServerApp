@@ -16,7 +16,7 @@ public class TCPConnection {
         this(eventListener, new Socket(ipAddr, port));
     }
 
-    public TCPConnection(TCPConnectionListener eventListener, Socket socket) throws IOException {
+    public TCPConnection(final TCPConnectionListener eventListener, Socket socket) throws IOException {
         this.eventListener = eventListener;
         this.socket = socket;
         in = new BufferedReader(new InputStreamReader(socket.getInputStream(), Charset.forName("UTF-8")));

@@ -5,8 +5,9 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.IOException;
-import java.io.InterruptedIOException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.ArrayList;
 
 public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionListener {
@@ -17,7 +18,8 @@ public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionL
     private static final int ALLOWED_MIN_PORT_NUMBER = 49152;
     private static final int ALLOWED_MAX_PORT_NUMBER = 65535;
     
-    private ServerThread serverThread;
+    private ServerSocket serverSocket;
+    private ServerListener serverListener;
     private final ArrayList<TCPConnection> connections = new ArrayList<>();
     
     public static void main(String[] args) {
@@ -55,42 +57,54 @@ public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionL
         return result;
     }
     
-    private class ServerThread extends Thread {
-        private int port;
+    private class ServerListener extends Thread {
         
-        public ServerThread(int port) {
-            super();
-            this.port = port;
-        }
+        private Socket socket;
         
-        @Override
         public void run() {
-            try (ServerSocket serverSocket = new ServerSocket(port)){
-                log("Server has been started");
-                while (!isInterrupted()) {
+            log("Server has been started");
+            while (!isInterrupted()) {
+                try {
+                    socket = serverSocket.accept();
                     try {
-                        new TCPConnection(PublicChatRoomServerWindow.this, serverSocket.accept());
+                        new TCPConnection(PublicChatRoomServerWindow.this, socket);
                     } catch (IOException e) {
                         log("TCPConnection exception: " + e);
-                        e.printStackTrace();
                     }
+                } catch (IOException e) {
+                    log("Unexpected exception while trying to get incoming connections");
+                    return;
+                } finally {
+                    close();
                 }
-            } catch (IOException e) {
-                log("IOException when getting server socket: " + e);
-                e.printStackTrace();
-                throw new RuntimeException(e);
+            }
+        }
+        
+        public void close() {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    log("Unexpected exception while trying to close all incoming connections");
+                }
             }
         }
     }
     
     private void runServer() {
-        if (serverThread == null) {
+        if ((serverSocket == null) || (serverSocket.isClosed())) {
             int port = portNumber(fieldInputPort.getText());
             if (port != 0) {
                 log("Running server ...");
-                // TODO Устранить появления исключения IOException when getting server socket: java.net.BindException: Address already in use (Bind failed)
-                serverThread = new ServerThread(port);
-                serverThread.start();
+                try {
+                    serverSocket = new ServerSocket();
+                    serverSocket.setReuseAddress(true);
+                    serverSocket.bind(new InetSocketAddress(port));
+                    serverListener = new ServerListener();
+                    serverListener.start();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             } else {
                 JOptionPane.showMessageDialog(this,
                                               "Выберите порт в диапазоне " + ALLOWED_MIN_PORT_NUMBER + "-" + ALLOWED_MAX_PORT_NUMBER,
@@ -101,17 +115,23 @@ public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionL
     }
     
     private void stopServer() {
-        if (serverThread != null) {
+        if ((serverSocket != null) && (!serverSocket.isClosed())) {
             log("Stopping server ...");
-            serverThread.interrupt();
-            serverThread = null;
-            log("Server has been stopped");
+            try {
+                serverSocket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                serverListener.close();
+                serverListener.interrupt();
+                log("Server has been stopped");
+            }
         }
     }
     
     private PublicChatRoomServerWindow() {
         
-        serverThread = null;
+        serverSocket = null;
         
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setSize(WIDTH, HEIGHT);
@@ -192,31 +212,30 @@ public class PublicChatRoomServerWindow extends JFrame implements TCPConnectionL
     }
     
     @Override
-    public void onConnectionReady(TCPConnection tcpConnection) {
+    public synchronized void onConnectionReady(TCPConnection tcpConnection) {
         connections.add(tcpConnection);
-        sendToAllClients("New client with IP address " + tcpConnection.getIPAddressAsString() + " connected to the port" + tcpConnection.getPortAsString());
+        sendToAllConnections("Client connected: " + tcpConnection);
     }
     
     @Override
-    public void onReceiveString(TCPConnection tcpConnection, String message) {
-        sendToAllClients(message);
+    public synchronized void onReceiveString(TCPConnection tcpConnection, String value) {
+        sendToAllConnections(value);
     }
     
     @Override
-    public void onDisconnect(TCPConnection tcpConnection) {
+    public synchronized void onDisconnect(TCPConnection tcpConnection) {
         connections.remove(tcpConnection);
-        sendToAllClients("Client with IP address " + tcpConnection.getIPAddressAsString() + " disconnected");
+        sendToAllConnections("Client disconnected: " + tcpConnection);
     }
     
     @Override
-    public void onException(TCPConnection tcpConnection, Exception e) {
-        log("TCPConnection exception: " + e);
+    public synchronized void onException(TCPConnection tcpConnection, Exception e) {
+        System.out.println("TCPConnection exception: " + e);
     }
     
-    private void sendToAllClients(String message) {
-        log(message);
-        for (TCPConnection connection: connections) {
-            connection.sendString(message);
-        }
+    private void sendToAllConnections(String value){
+        System.out.println(value);
+        final int cnt = connections.size();
+        for (int i = 0; i < cnt; i++) connections.get(i).sendString(value);
     }
 }
